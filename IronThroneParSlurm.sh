@@ -22,6 +22,7 @@ log=myGoT.log
 keepouts=0
 verbose=0
 skip_shuf=0
+partition=pe2
 pcr_read_threshold=0.5
 skip_iron_throne=0
 levenshtein_distance=0.1
@@ -80,6 +81,9 @@ while [ "$1" != "" ]; do
 					;;
 		-z | --skip_shuf )	shift
 					skip_shuf=$1
+					;;
+		-pt | --partition )	shift
+					partition=$1
 					;;
 		-pcr | --pcr_read_threshold )	shift
 					pcr_read_threshold=$1
@@ -197,20 +201,17 @@ fi
 mkdir -p Output
 cd Output/
 main_output_folder=$(pwd)
+mkdir -p Finish_tally
 
 cd ..
 cd shuffled_split/
 
 if ((skip_iron_throne != 1))
 then
-	echo Begin job parallelization
-fi
+	echo Begin multiple job submission
 
-#Create text file of commands for GNU Parallel to execute
-touch ../Parallel_Command_List.txt
->../Parallel_Command_List.txt
 
-#Loop through split R1 and R2 files, creating directories for each split's individual IronThrone run and adding a command to the parallel command list with the corresponding R1 and R2 filenames
+#Loop through split R1 and R2 files, creating directories for each split's individual IronThrone run and submitting a job with the corresponding R1 and R2 filenames. Use the Finish_tally folder to keep track of job completion status.
 total_files=0
 for i in $(ls | grep '.*R[0-9][0-9][0-9][0-9]' | sed 's/\.fastq//g' | sed 's/.*R[0-9]//g' | sort | uniq);
 do
@@ -219,7 +220,22 @@ R2=$(pwd)'/'$(ls | grep "R2${i}");
 output=${main_output_folder}'/'${i}
 mkdir -p ${output};
 
-echo "module load got/0.1; \
+cat <<EOF > ../IronThroneCustomInput.sh
+#!/bin/bash
+
+#$ -cwd
+#$ -V
+#$ -pe smp 2
+#$ -l h_vmem=10G
+
+#SBATCH --job-name=IronThronePar
+#SBATCH --partition=${partition}
+#SBATCH --mem=10gb
+#SBATCH --output=%j.log
+#SBATCH --cpus-per-task=2
+
+module load got/0.1
+
 IronThrone-GoT \
 -r ${run} \
 -f1 ${R1} \
@@ -235,27 +251,80 @@ IronThrone-GoT \
 -s ${sample} \
 -l ${log} \
 -k ${keepouts} \
--v ${verbose}" >> ../Parallel_Command_List.txt
+-v ${verbose} \
 
 
+
+cd $main_output_folder
+cd Finish_tally
+touch ${i}
+
+EOF
+sbatch ../IronThroneCustomInput.sh
+#qsub ../IronThroneCustomInput.sh
+total_files=$(( total_files + 1 ))
 done
 
-#Back to main level folder
+#Current folder here is shuffled_split
+
+
 cd ..
+cd Output/Finish_tally
 
-#Run list of IronThrone commands on split fastqs using GNU Parallel
-if ((skip_iron_throne != 1))
-then
-	parallel :::: Parallel_Command_List.txt
+#Add step for jobs to finish before continuing
+while (( $(ls | wc -l) < total_files ))
+do
+	sleep 1
+done
 
-	echo All instances of IronThrone complete
+echo All instances of IronThrone complete
 fi
 
-#Call R script to concatenate and collapse output
-Rscript Combine_IronThrone_Parallel_Output.R $main_output_folder ${pcr_read_threshold} ${levenshtein_distance} ${dupcut}
+#Change current folder to main Output folder
+cd ..
 
+#Remove Finish_tally folder to avoid conflicts with next steps
+rm -r Finish_tally/
+
+#Call Rscript to concatenate and collapse output (Script will be located one level up from Output folder, in the main folder with data/scripts)
+
+
+
+cd ..
+rloc=$(readlink -f Combine_IronThrone_Parallel_Output.R)
+
+
+cat <<EOF > CombineIronThronePar.sh
+#!/bin/bash
+
+#$ -cwd
+#$ -V
+#$ -pe smp 2
+#$ -l h_vmem=10G
+
+#SBATCH --job-name=IronThroneParConcat
+#SBATCH --partition=${partition}
+#SBATCH --mem=10gb
+#SBATCH --output=%j.log
+#SBATCH --cpus-per-task=16
+
+module load R/3.6.1
+
+Rscript $rloc $main_output_folder ${pcr_read_threshold} ${levenshtein_distance} ${dupcut}
+
+touch temp
+
+EOF
+
+sbatch CombineIronThronePar.sh
+#qsub CombineIronThronePar.sh
+
+until [ -f temp ]
+do
+     sleep 5
+done
 echo All IronThrone outputs concatenated into myGoT.summTable.concat.txt
-
+rm temp
 outdir=$(readlink -f $outdir)
 
 if [ ! -f $outdir'/myGoT.summTable.concat.txt' ]
@@ -264,4 +333,6 @@ then
 	mv myGoT.summTable.concat.umi_collapsed.txt $outdir
 fi
 
-rm Parallel_Command_List.txt
+rm *.log
+rm CombineIronThronePar.sh
+rm IronThroneCustomInput.sh

@@ -22,6 +22,7 @@ log=myGoT.log
 keepouts=0
 verbose=0
 skip_shuf=0
+iron_throne_loc=./IronThrone-GoT
 pcr_read_threshold=0.5
 skip_iron_throne=0
 levenshtein_distance=0.1
@@ -81,6 +82,9 @@ while [ "$1" != "" ]; do
 		-z | --skip_shuf )	shift
 					skip_shuf=$1
 					;;
+		-i | --iron_throne_loc )	shift
+					iron_throne_loc=$1
+					;;
 		-pcr | --pcr_read_threshold )	shift
 					pcr_read_threshold=$1
 					;;
@@ -113,9 +117,10 @@ then
 fi
 
 
-#Set precise paths for config and whitelist files
-config=$(readlink -f $config)
-whitelist=$(readlink -f $whitelist)
+#Set precise paths for config, whitelist, and IronThrone files
+config=$(greadlink -f $config)
+whitelist=$(greadlink -f $whitelist)
+iron_throne_loc=$(greadlink -f $iron_throne_loc)
 
 #If skip_shuf option is not passed, will do the following section to shuffle and split the reads
 if ((skip_shuf != 1))
@@ -172,8 +177,8 @@ then
 	fi
 
 
-	split -d -a 3 -l $target_lines shuffled.R1.fastq shuffled.R1
-	split -d -a 3 -l $target_lines shuffled.R2.fastq shuffled.R2
+	gsplit -d -a 3 -l $target_lines shuffled.R1.fastq shuffled.R1
+	gsplit -d -a 3 -l $target_lines shuffled.R2.fastq shuffled.R2
 
 	total_files=$(ls shuffled.R1[0-9]* | wc -l)
 
@@ -219,8 +224,7 @@ R2=$(pwd)'/'$(ls | grep "R2${i}");
 output=${main_output_folder}'/'${i}
 mkdir -p ${output};
 
-echo "module load got/0.1; \
-IronThrone-GoT \
+echo "${iron_throne_loc} \
 -r ${run} \
 -f1 ${R1} \
 -f2 ${R2} \
@@ -256,7 +260,7 @@ Rscript Combine_IronThrone_Parallel_Output.R $main_output_folder ${pcr_read_thre
 
 echo All IronThrone outputs concatenated into myGoT.summTable.concat.txt
 
-outdir=$(readlink -f $outdir)
+outdir=$(greadlink -f $outdir)
 
 if [ ! -f $outdir'/myGoT.summTable.concat.txt' ]
 then

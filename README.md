@@ -16,7 +16,7 @@
 
 ## New Option Parameters
 | Option | Description |
-| -------- | ----------- |
+| ------ | ----------- |
 | `-tl/--target_lines` | desired file length for split fastq files (must be multiple of 4) |
 | `-pcr/--pcr_read_threshold` | ratio above which majority of PCR reads must be in order for a UMI to be called definitively  (default: 0.5) |
 

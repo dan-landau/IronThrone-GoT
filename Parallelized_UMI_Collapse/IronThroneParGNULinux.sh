@@ -1,6 +1,5 @@
 #!/bin/bash
 
-
 #Navigate to directory out of which parallelization script is being run
 cd $(dirname $0)
 
@@ -23,6 +22,7 @@ log=myGoT.log
 keepouts=0
 verbose=0
 skip_shuf=0
+iron_throne_loc=./IronThrone-GoT
 pcr_read_threshold=0.5
 skip_iron_throne=0
 levenshtein_distance=0.1
@@ -82,6 +82,9 @@ while [ "$1" != "" ]; do
 		-z | --skip_shuf )	shift
 					skip_shuf=$1
 					;;
+		-i | --iron_throne_loc )	shift
+					iron_throne_loc=$1
+					;;
 		-pcr | --pcr_read_threshold )	shift
 					pcr_read_threshold=$1
 					;;
@@ -114,9 +117,10 @@ then
 fi
 
 
-#Set precise paths for config and whitelist files
+#Set precise paths for config, whitelist, and IronThrone files
 config=$(readlink -f $config)
 whitelist=$(readlink -f $whitelist)
+iron_throne_loc=$(readlink -f $iron_throne_loc)
 
 #If skip_shuf option is not passed, will do the following section to shuffle and split the reads
 if ((skip_shuf != 1))
@@ -133,7 +137,6 @@ then
 	        echo Single R2 file needs to be specified or spaces need to be removed from filename
 	        exit 1
 	fi
-
 
 	#Join R1 and R2 into a single file with each line containing tab-separated corresponding lines of R1 and R2
 	paste $fastqR1 $fastqR2 > combined.fastq
@@ -208,7 +211,6 @@ then
 	echo Begin job parallelization
 fi
 
-
 #Create text file of commands for GNU Parallel to execute
 touch ../Parallel_Command_List.txt
 >../Parallel_Command_List.txt
@@ -222,8 +224,7 @@ R2=$(pwd)'/'$(ls | grep "R2${i}");
 output=${main_output_folder}'/'${i}
 mkdir -p ${output};
 
-echo "module load got/0.1; \
-IronThrone-GoT \
+echo "${iron_throne_loc} \
 -r ${run} \
 -f1 ${R1} \
 -f2 ${R2} \
@@ -246,7 +247,6 @@ done
 #Back to main level folder
 cd ..
 
-
 #Run list of IronThrone commands on split fastqs using GNU Parallel
 if ((skip_iron_throne != 1))
 then
@@ -254,7 +254,6 @@ then
 
 	echo All instances of IronThrone complete
 fi
-
 
 #Call R script to concatenate and collapse output
 Rscript Combine_IronThrone_Parallel_Output.R $main_output_folder ${pcr_read_threshold} ${levenshtein_distance} ${dupcut}
@@ -268,6 +267,5 @@ then
 	mv myGoT.summTable.concat.txt $outdir
 	mv myGoT.summTable.concat.umi_collapsed.txt $outdir
 fi
-
 
 rm Parallel_Command_List.txt

@@ -1,4 +1,35 @@
+# What's New in Version 2.1
+- Built in UMI collapsing algorithm
+- Parallel processing enabled on Mac, Linux, and Slurm HPC systems
+- Automatic file detection
+
+## Dependencies
+- [R](https://www.r-project.org/)
+- [GNU Parallel](https://www.gnu.org/software/parallel/)
+
+## Setup
+- All options from IronThrone v 1.0 still function as described below.
+- In a single directory, place amplicon R1/R2 files, barcode whitelist file, config file, IronThrone-GoT script, and the appropriate Parallelized UMI Collapse script
+- fastq files will be automatically detected if filenames contain `R1` or `R2`
+- Barcode whitelist file will be automatically detected if filename contains `B/barcode`
+- Config file will be automatically detected if file extension is `.config`
+
+## New Option Parameters
+| Option | Description |
+| ------ | ----------- |
+| `-tl/--target_lines` | desired file length for split fastq files (must be multiple of 4, default: 500000) |
+| `-pcr/--pcr_read_threshold` | ratio above which majority of PCR reads must be in order for a UMI to be called definitively  (default: 0.5) |
+| `-z/--skip_shuf` | if set to 1, skip the random shuffling of fastq files step, useful if needing to re-run just the IronThrone and UMI collapsing components of the pipeline (default: 0)|
+| `-x/--ski_iron_throne` | if set to 1, skip the IronThrone step of the pipeline, useful if run in combination with `skip_shuf` to only run the UMI collapsing component of the pipeline (default: 0) |
+| `-ld/--levenshtein distance` | Allowed Levenshtein distance between UMIs determined to be similar enough for collapsing (default: 0.1) |
+
 <a href="https://github.com/landau-lab/IronThrone-GoT"><img src="https://github.com/landau-lab/IronThrone-GoT/blob/master/GoT_logo.png" border="0"></a>
+
+## Notes/Bugs to be Ironed out in Future Versions
+- Amplicon fastqs should be concatenated, paired-end, into 1 `R1` and 1 `R2` file
+- fastq read lengths should be identical for all reads within a given R1 or R2 file (R1 and R2 read lengths do not need to be equivalent)
+- Barcode file can be a complete whitelist provided by 10X (see below) or a custom `.txt` file of barcodes from a corresponding 10X run
+- `.config` file entries should be hard-tab-separated
 
 # <a name="started"></a>IronThrone-GoT
 Processes GoT amplicon data and generates a table of metrics

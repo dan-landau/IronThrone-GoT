@@ -9,7 +9,7 @@
 
 ## Setup
 - All options from IronThrone v 1.0 still function as described below.
-- In a single directory, place amplicon R1/R2 files, barcode whitelist file, config file, IronThrone-GoT script, and the appropriate Parallelized UMI Collapse script
+- In a single directory, place amplicon R1/R2 files, barcode whitelist file, config file, `IronThrone-GoT script`, `Combine_IronThrone_Parallel_Output.R` script, and the appropriate Parallelized UMI Collapse script
 - fastq files will be automatically detected if filenames contain `R1` or `R2`
 - Barcode whitelist file will be automatically detected if filename contains `B/barcode`
 - Config file will be automatically detected if file extension is `.config`

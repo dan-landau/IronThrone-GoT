@@ -1,6 +1,14 @@
-## What's New in Version 2
+# What's New in Version 2
 - Built in UMI collapsing algorithm
 - Parallel processing enabled on Mac, Linux, and Slurm HPC systems
+
+## Dependencies
+- R
+- GNU Parallel
+
+## Setup
+
+## New Option Parameters
 
 <a href="https://github.com/landau-lab/IronThrone-GoT"><img src="https://github.com/landau-lab/IronThrone-GoT/blob/master/GoT_logo.png" border="0"></a>
 

@@ -1,5 +1,6 @@
 #!/bin/bash
 
+
 #Navigate to directory out of which parallelization script is being run
 cd $(dirname $0)
 
@@ -133,6 +134,7 @@ then
 	        exit 1
 	fi
 
+
 	#Join R1 and R2 into a single file with each line containing tab-separated corresponding lines of R1 and R2
 	paste $fastqR1 $fastqR2 > combined.fastq
 	echo fastq files joined
@@ -206,6 +208,7 @@ then
 	echo Begin job parallelization
 fi
 
+
 #Create text file of commands for GNU Parallel to execute
 touch ../Parallel_Command_List.txt
 >../Parallel_Command_List.txt
@@ -243,6 +246,7 @@ done
 #Back to main level folder
 cd ..
 
+
 #Run list of IronThrone commands on split fastqs using GNU Parallel
 if ((skip_iron_throne != 1))
 then
@@ -250,6 +254,7 @@ then
 
 	echo All instances of IronThrone complete
 fi
+
 
 #Call R script to concatenate and collapse output
 Rscript Combine_IronThrone_Parallel_Output.R $main_output_folder ${pcr_read_threshold} ${levenshtein_distance} ${dupcut}
@@ -263,5 +268,6 @@ then
 	mv myGoT.summTable.concat.txt $outdir
 	mv myGoT.summTable.concat.umi_collapsed.txt $outdir
 fi
+
 
 rm Parallel_Command_List.txt

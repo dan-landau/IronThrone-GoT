@@ -4,8 +4,8 @@
 - Automatic file detection
 
 ## Dependencies
-- [R] (https://www.r-project.org/)
-- [GNU Parallel] (https://www.gnu.org/software/parallel/)
+- [R](https://www.r-project.org/)
+- [GNU Parallel](https://www.gnu.org/software/parallel/)
 
 ## Setup
 - All options from IronThrone v 1.0 still function as described below.

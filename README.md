@@ -4,8 +4,8 @@
 - Automatic file detection
 
 ## Dependencies
-- R
-- GNU Parallel
+- [R] (https://www.r-project.org/)
+- [GNU Parallel] (https://www.gnu.org/software/parallel/)
 
 ## Setup
 - All options from IronThrone v 1.0 still function as described below.
@@ -18,18 +18,7 @@
 | Option | Description |
 | ------ | ----------- |
 | `-tl/--target_lines` | desired file length for split fastq files (must be multiple of 4) |
-| `-p/--postP` | cutoff for the posterior probability in the barcode replacement (default: 0.99) |
-| `-d/--dupcut` | cutoff for the total number of duplication (default: 1) |
-| `-b/--bclen` | length of barcode (default: 16) |
-| `-u/--umilen` | length of UMI (default: 10) |
-| `-w/--whitelist` | file for whitelisted barcodes (737K-august-2016.txt) |
-| `-s/--sample` | prefix for outputs (myGoT) |
-| `-o/--outdir` | path for outputs (./out) |
-| `-l/--log` | logfile name (myGoT.log) |
-| `-t/--thread` | number of threads to run in parallel (default: 4) |
-| `-k/--keepouts` | if set to 1, keeping intermediate files (default: 0) |
-| `-v/--verbose` | if set to 1, returning more logs (default: 0) |
-| `-h/--help` | show option parameters |
+| `-pcr/--pcr_read_threshold` | ratio above which majority of PCR reads must be in order for a UMI to be called definitively  (default: 0.5) |
 
 <a href="https://github.com/landau-lab/IronThrone-GoT"><img src="https://github.com/landau-lab/IronThrone-GoT/blob/master/GoT_logo.png" border="0"></a>
 

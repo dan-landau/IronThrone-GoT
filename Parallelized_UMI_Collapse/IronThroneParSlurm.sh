@@ -281,7 +281,7 @@ echo All instances of IronThrone complete
 fi
 
 #Change current folder to main Output folder
-cd ..
+cd $main_output_folder
 
 #Remove Finish_tally folder to avoid conflicts with next steps
 rm -r Finish_tally/

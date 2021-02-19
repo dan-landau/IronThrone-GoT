@@ -119,14 +119,15 @@ list_collapse <- function(single_got_row){
     num_of_matches <- unlist(lapply(match_list, FUN = function(x) length(x)))
   }
   #Reformat the data for remaining UMIs following collapsing back into the format of the original IronThone data frame
-  single_got_row[,"UMI"] <- paste0(UMIs, collapse = ";")
-  single_got_row[,"num.WT.in.dups"] <- paste0(num.WT.in.dups, collapse = ";")
-  single_got_row[,"num.MUT.in.dups"] <- paste0(num.MUT.in.dups, collapse = ";")
-  single_got_row[,"num.amb.in.dups"] <- paste0(num.amb.in.dups, collapse = ";")
-  single_got_row[,"call.in.dups"] <- paste0(call.in.dups, collapse = ";")
-  single_got_row[,"WT.calls"] <- sum(call.in.dups == "WT")
-  single_got_row[,"MUT.calls"] <- sum(call.in.dups == "MUT")
-  single_got_row[,"amb.calls"] <- sum(call.in.dups == "AMB")
+  sort_val <- order(num.WT.in.dups + num.MUT.in.dups + num.amb.in.dups, decreasing = TRUE)
+  single_got_row[,"UMI"] <- paste0(UMIs[sort_val], collapse = ";")
+  single_got_row[,"num.WT.in.dups"] <- paste0(num.WT.in.dups[sort_val], collapse = ";")
+  single_got_row[,"num.MUT.in.dups"] <- paste0(num.MUT.in.dups[sort_val], collapse = ";")
+  single_got_row[,"num.amb.in.dups"] <- paste0(num.amb.in.dups[sort_val], collapse = ";")
+  single_got_row[,"call.in.dups"] <- paste0(call.in.dups[sort_val], collapse = ";")
+  single_got_row[,"WT.calls"] <- sum(call.in.dups[sort_val] == "WT")
+  single_got_row[,"MUT.calls"] <- sum(call.in.dups[sort_val] == "MUT")
+  single_got_row[,"amb.calls"] <- sum(call.in.dups[sort_val] == "AMB")
   
   #Keep only those UMIs with a total number of supporting PCR duplicates above the pre-specified threshold
   dup_thresh <- dupcut

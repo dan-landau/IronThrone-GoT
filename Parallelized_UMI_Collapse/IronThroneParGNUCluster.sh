@@ -26,6 +26,7 @@ pcr_read_threshold=0.5
 skip_iron_throne=0
 levenshtein_distance=0.1
 low_mem=0
+threads=$(nproc)
 
 
 #Set Up Command Line Options
@@ -93,6 +94,9 @@ while [ "$1" != "" ]; do
 					;;
 		-lm | --low_mem )		shift
 					low_mem=$1
+					;;
+		-t | --threads )		shift
+					threads=$1
 					;;
 	esac
 	shift
@@ -270,7 +274,7 @@ cd ..
 #Run list of IronThrone commands on split fastqs using GNU Parallel
 if ((skip_iron_throne != 1))
 then
-	parallel :::: Parallel_Command_List.txt
+	parallel -j ${threads} :::: Parallel_Command_List.txt
 
 	echo All instances of IronThrone complete
 fi

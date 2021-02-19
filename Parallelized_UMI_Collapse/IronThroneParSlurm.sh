@@ -27,6 +27,7 @@ pcr_read_threshold=0.5
 skip_iron_throne=0
 levenshtein_distance=0.1
 low_mem=0
+threads=$(nproc)
 
 
 #Set Up Command Line Options
@@ -97,6 +98,9 @@ while [ "$1" != "" ]; do
 					;;
 		-lm | --low_mem )		shift
 					low_mem=$1
+					;;
+		-t | --threads )		shift
+					threads=$1
 					;;
 	esac
 	shift

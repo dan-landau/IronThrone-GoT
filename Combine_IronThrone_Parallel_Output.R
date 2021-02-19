@@ -37,7 +37,7 @@ concatenate_got <- function(BC, split_df){
 #Identify all unique barcodes in the data frame and run the concatenating function 
 unique_bc <- unique(split_got_df[,"BC"])
 concat_got_df <- as.data.frame(Reduce(rbind, mclapply(unique_bc, FUN = function(x) (concatenate_got(BC = x, split_df = split_got_df)))), stringsAsFactors = FALSE)
-write.table(concat_got_df, file = "../myGoT.summTable.concat.txt", sep = "\t", row.names = FALSE, col.names = TRUE)
+write.table(concat_got_df, file = "../myGoT.summTable.concat.txt", sep = "\t", row.names = FALSE, col.names = TRUE, quote = FALSE)
 
 
 #Collapse UMIs #####
@@ -153,4 +153,4 @@ UMI_collapse <- function(GoT_table){
 max_collapsed_GoT_table <- UMI_collapse(raw_GoT_table)
 
 #Save output
-write.table(max_collapsed_GoT_table, file = "../myGoT.summTable.concat.umi_collapsed.txt", sep = "\t", row.names = FALSE, col.names = TRUE)
+write.table(max_collapsed_GoT_table, file = "../myGoT.summTable.concat.umi_collapsed.txt", sep = "\t", row.names = FALSE, col.names = TRUE, quote = FALSE)

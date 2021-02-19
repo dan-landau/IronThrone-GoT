@@ -228,68 +228,72 @@ cd Output/
 main_output_folder=$(pwd)
 
 cd ..
-cd shuffled_split/
 
 if ((skip_iron_throne != 1))
 then
-	echo Begin job parallelization
-fi
+	cd shuffled_split/
 
-#Create text file of commands for GNU Parallel to execute
-touch ../Parallel_Command_List.txt
->../Parallel_Command_List.txt
+	if ((skip_iron_throne != 1))
+	then
+		echo Begin job parallelization
+	fi
 
-#Loop through split R1 and R2 files, creating directories for each split's individual IronThrone run and adding a command to the parallel command list with the corresponding R1 and R2 filenames
-total_files=0
-for i in $(ls | grep '.*R[0-9][0-9][0-9][0-9][0-9]' | sed 's/\.fastq//g' | sed 's/.*R[0-9]//g' | sort | uniq);
-do
-R1=$(pwd)'/'$(ls | grep "R1${i}");
-R2=$(pwd)'/'$(ls | grep "R2${i}");
-output=${main_output_folder}'/'${i}
-mkdir -p ${output};
+	#Create text file of commands for GNU Parallel to execute
+	touch ../Parallel_Command_List.txt
+	>../Parallel_Command_List.txt
 
-echo "${iron_throne_loc} \
--r ${run} \
--f1 ${R1} \
--f2 ${R2} \
--c ${config} \
--w ${whitelist} \
--u ${umilen} \
--b ${bclen} \
--o ${output} \
--m ${mmtch} \
--p ${postP} \
--d 1 \
--s ${sample} \
--l ${log} \
--k ${keepouts} \
--v ${verbose}" >> ../Parallel_Command_List.txt
+	#Loop through split R1 and R2 files, creating directories for each split's individual IronThrone run and adding a command to the parallel command list with the corresponding R1 and R2 filenames
+	total_files=0
+	for i in $(ls | grep '.*R[0-9][0-9][0-9][0-9][0-9]' | sed 's/\.fastq//g' | sed 's/.*R[0-9]//g' | sort | uniq);
+	do
+	R1=$(pwd)'/'$(ls | grep "R1${i}");
+	R2=$(pwd)'/'$(ls | grep "R2${i}");
+	output=${main_output_folder}'/'${i}
+	mkdir -p ${output};
+
+	echo "${iron_throne_loc} \
+	-r ${run} \
+	-f1 ${R1} \
+	-f2 ${R2} \
+	-c ${config} \
+	-w ${whitelist} \
+	-u ${umilen} \
+	-b ${bclen} \
+	-o ${output} \
+	-m ${mmtch} \
+	-p ${postP} \
+	-d 1 \
+	-s ${sample} \
+	-l ${log} \
+	-k ${keepouts} \
+	-v ${verbose}" >> ../Parallel_Command_List.txt
 
 
-done
+	done
 
-#Back to main level folder
-cd ..
+	#Back to main level folder
+	cd ..
 
-#Run list of IronThrone commands on split fastqs using GNU Parallel
-if ((skip_iron_throne != 1))
-then
+	#Run list of IronThrone commands on split fastqs using GNU Parallel
 	parallel -j ${threads} :::: Parallel_Command_List.txt
 
 	echo All instances of IronThrone complete
 fi
 
 #Call R script to concatenate and collapse output
-Rscript Combine_IronThrone_Parallel_Output.R $main_output_folder ${pcr_read_threshold} ${levenshtein_distance} ${dupcut}
+Rscript Combine_IronThrone_Parallel_Output.R $main_output_folder ${pcr_read_threshold} ${levenshtein_distance} ${dupcut} ${threads}
 
-echo All IronThrone outputs concatenated into myGoT.summTable.concat.txt
+echo All IronThrone outputs concatenated into myGoT.summTable.concat.umi_collapsed.txt
 
 outdir=$(readlink -f $outdir)
 
-if [ ! -f $outdir'/myGoT.summTable.concat.txt' ]
+if [ ! -f $outdir'/myGoT.summTable.concat.umi_collapsed.txt' ]
 then
 	mv myGoT.summTable.concat.txt $outdir
 	mv myGoT.summTable.concat.umi_collapsed.txt $outdir
 fi
 
-rm Parallel_Command_List.txt
+if ((skip_iron_throne != 1))
+then
+	rm Parallel_Command_List.txt
+fi

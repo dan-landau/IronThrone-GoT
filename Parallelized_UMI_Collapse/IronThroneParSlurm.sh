@@ -247,11 +247,6 @@ mkdir -p ${output};
 cat <<EOF > ../IronThroneCustomInput.sh
 #!/bin/bash
 
-#$ -cwd
-#$ -V
-#$ -pe smp 2
-#$ -l h_vmem=10G
-
 #SBATCH --job-name=IronThronePar
 #SBATCH --partition=${partition}
 #SBATCH --mem=10gb
@@ -321,20 +316,15 @@ rloc=$(readlink -f Combine_IronThrone_Parallel_Output.R)
 cat <<EOF > CombineIronThronePar.sh
 #!/bin/bash
 
-#$ -cwd
-#$ -V
-#$ -pe smp 2
-#$ -l h_vmem=10G
-
 #SBATCH --job-name=IronThroneParConcat
 #SBATCH --partition=${partition}
 #SBATCH --mem=10gb
 #SBATCH --output=%j.log
-#SBATCH --cpus-per-task=16
+#SBATCH --cpus-per-task=${threads}
 
 module load R/3.6.1
 
-Rscript $rloc $main_output_folder ${pcr_read_threshold} ${levenshtein_distance} ${dupcut}
+Rscript $rloc $main_output_folder ${pcr_read_threshold} ${levenshtein_distance} ${dupcut} ${threads}
 
 touch temp
 
@@ -347,11 +337,11 @@ until [ -f temp ]
 do
      sleep 5
 done
-echo All IronThrone outputs concatenated into myGoT.summTable.concat.txt
+echo All IronThrone outputs concatenated into myGoT.summTable.concat.umi_collapsed.txt
 rm temp
 outdir=$(readlink -f $outdir)
 
-if [ ! -f $outdir'/myGoT.summTable.concat.txt' ]
+if [ ! -f $outdir'/myGoT.summTable.concat.umi_collapsed.txt' ]
 then
 	mv myGoT.summTable.concat.txt $outdir
 	mv myGoT.summTable.concat.umi_collapsed.txt $outdir

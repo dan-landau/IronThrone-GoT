@@ -1,6 +1,5 @@
 #!/bin/bash
 
-
 #Navigate to directory out of which parallelization script is being run
 cd $(dirname $0)
 
@@ -26,6 +25,7 @@ skip_shuf=0
 pcr_read_threshold=0.5
 skip_iron_throne=0
 levenshtein_distance=0.1
+low_mem=0
 
 
 #Set Up Command Line Options
@@ -91,6 +91,9 @@ while [ "$1" != "" ]; do
 		-ld | --levenshtein_distance )	shift
 					levenshtein_distance=$1
 					;;
+		-lm | --low_mem )		shift
+					low_mem=$1
+					;;
 	esac
 	shift
 done
@@ -141,18 +144,35 @@ then
 
 
 	#Randomly sort lines of combined R1/R2 file
-	if (($(grep ";" combined.fastq | wc -l) == 0))
+	if ($low_mem == 1)
 	then
-		awk '{printf("%s%s",$0,(NR%4==0)?"\n":";")}' combined.fastq | shuf | tr ";" "\n" > combined_shuffled.fastq
-		echo fastq files shuffled
-	elif (($(grep "|" combined.fastq | wc -l) == 0))
-	then
-		awk '{printf("%s%s",$0,(NR%4==0)?"\n":"|")}' combined.fastq | shuf | tr "|" "\n" > combined_shuffled.fastq
-		echo fastq files shuffled
+		if (($(grep ";" combined.fastq | wc -l) == 0))
+		then
+			awk '{printf("%s%s",$0,(NR%4==0)?"\n":";")}' combined.fastq | sort -R | tr ";" "\n" > combined_shuffled.fastq
+			echo fastq files shuffled
+		elif (($(grep "|" combined.fastq | wc -l) == 0))
+		then
+			awk '{printf("%s%s",$0,(NR%4==0)?"\n":"|")}' combined.fastq | sort -R | tr "|" "\n" > combined_shuffled.fastq
+			echo fastq files shuffled
+		else
+			echo "New awk-line character needed"
+			exit 1
+		fi
 	else
-		echo "New awk-line character needed"
-		exit 1
+		if (($(grep ";" combined.fastq | wc -l) == 0))
+		then
+			awk '{printf("%s%s",$0,(NR%4==0)?"\n":";")}' combined.fastq | shuf | tr ";" "\n" > combined_shuffled.fastq
+			echo fastq files shuffled
+		elif (($(grep "|" combined.fastq | wc -l) == 0))
+		then
+			awk '{printf("%s%s",$0,(NR%4==0)?"\n":"|")}' combined.fastq | shuf | tr "|" "\n" > combined_shuffled.fastq
+			echo fastq files shuffled
+		else
+			echo "New awk-line character needed"
+			exit 1
+		fi
 	fi
+
 
 	#Separate shuffled file back into R1 and R2
 	cut -f1 -d$'\t' combined_shuffled.fastq > shuffled.R1.fastq

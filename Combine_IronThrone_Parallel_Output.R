@@ -4,6 +4,7 @@ wd <- options[1]
 pcr_thresh <- as.numeric(options[2])
 ld <- as.numeric(options[3])
 dupcut <- as.numeric(options[4])
+threads <- as.numeric(options[5])
 
 setwd(wd)
 library(parallel)
@@ -36,8 +37,8 @@ concatenate_got <- function(BC, split_df){
 
 #Identify all unique barcodes in the data frame and run the concatenating function 
 unique_bc <- unique(split_got_df[,"BC"])
-concat_got_df <- as.data.frame(Reduce(rbind, mclapply(unique_bc, FUN = function(x) (concatenate_got(BC = x, split_df = split_got_df)))), stringsAsFactors = FALSE)
-write.table(concat_got_df, file = "../myGoT.summTable.concat.txt", sep = "\t", row.names = FALSE, col.names = TRUE)
+concat_got_df <- as.data.frame(Reduce(rbind, mclapply(unique_bc, FUN = function(x) (concatenate_got(BC = x, split_df = split_got_df)), mc.cores = threads)), stringsAsFactors = FALSE)
+write.table(concat_got_df, file = "../myGoT.summTable.concat.txt", sep = "\t", row.names = FALSE, col.names = TRUE, quote = FALSE)
 
 
 #Collapse UMIs #####
@@ -144,7 +145,7 @@ UMI_collapse <- function(GoT_table){
                                       stringsAsFactors = FALSE)
   #Convert the GoT data frame into a list of single-row data frames where each entry is the data for a single cell barcode
   GoT_list <- split(GoT_table_to_collapse, seq(nrow(GoT_table_to_collapse)))
-  collapsed_GoT_list <- mclapply(GoT_list, FUN = list_collapse)
+  collapsed_GoT_list <- mclapply(GoT_list, FUN = list_collapse, mc.cores = threads)
   #Convert collapsed list back to a data frame
   collapsed_GoT_table <- do.call("rbind", collapsed_GoT_list)
   return(collapsed_GoT_table)
@@ -153,4 +154,4 @@ UMI_collapse <- function(GoT_table){
 max_collapsed_GoT_table <- UMI_collapse(raw_GoT_table)
 
 #Save output
-write.table(max_collapsed_GoT_table, file = "../myGoT.summTable.concat.umi_collapsed.txt", sep = "\t", row.names = FALSE, col.names = TRUE)
+write.table(max_collapsed_GoT_table, file = "../myGoT.summTable.concat.umi_collapsed.txt", sep = "\t", row.names = FALSE, col.names = TRUE, quote = FALSE)

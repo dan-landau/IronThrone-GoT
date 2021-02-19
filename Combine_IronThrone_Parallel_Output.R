@@ -19,16 +19,36 @@ for (i in list.files()){
 split_got2 <- as.data.frame(split_got[,1:(ncol(split_got)-3)], stringsAsFactors = FALSE)
 
 #Melt the data frame so each BC/UMI pair is a single row entry
-split_got_df <- data.frame(matrix(nrow = length(unlist(strsplit(split_got2[,"UMI"],";")))))
+split_got_df <- data.frame(matrix(nrow = length(unlist(strsplit(split_got2[,"UMI"],";"))), ncol = 0))
 for (i in colnames(split_got2)){
   split_got_df[,i] <- unlist(strsplit(split_got2[,i],";"))
 }
-split_got_df <- split_got_df[,2:ncol(split_got_df)]
+
+split_got_df_num <- split_got_df[,c("BC", "UMI", "num.WT.in.dups", "num.MUT.in.dups", "num.amb.in.dups")]
+split_got_df_num[,"num.WT.in.dups"] <- as.numeric(split_got_df_num[,"num.WT.in.dups"])
+split_got_df_num[,"num.MUT.in.dups"] <- as.numeric(split_got_df_num[,"num.MUT.in.dups"])
+split_got_df_num[,"num.amb.in.dups"] <- as.numeric(split_got_df_num[,"num.amb.in.dups"])
 
 #Function that takes the melted data frame from above and collapses down all UMIs associated with a single barcode (including duplicates) across all parallel runs of IronTHrone
 concatenate_got <- function(BC, split_df){
   single_bc_mat <- split_df[split_df[,"BC"] == BC,]
-  single_bc_vec <- apply(single_bc_mat, MARGIN = 2, FUN = function(x) paste0(x, collapse = ";"))
+  single_bc_mat_collapse <- data.frame(matrix(nrow = length(unique(single_bc_mat[,"UMI"]))))
+  single_bc_mat_collapse[,1] <- NULL
+  single_bc_mat_collapse[,"BC"] <- BC
+  single_bc_mat[,"BC"] <- NULL
+  single_bc_mat_collapse <- cbind(single_bc_mat_collapse, aggregate(single_bc_mat[,-1], by = list(single_bc_mat[,"UMI"]), sum))
+  colnames(single_bc_mat_collapse) <- c("BC", "UMI", "num.WT.in.dups", "num.MUT.in.dups", "num.amb.in.dups")
+  
+  wt_frac <- single_bc_mat_collapse[,"num.WT.in.dups"]/(single_bc_mat_collapse[,"num.WT.in.dups"] + single_bc_mat_collapse[,"num.MUT.in.dups"])
+  mut_frac <- single_bc_mat_collapse[,"num.MUT.in.dups"]/(single_bc_mat_collapse[,"num.WT.in.dups"] + single_bc_mat_collapse[,"num.MUT.in.dups"])
+  single_bc_mat_collapse[,"call.in.dups"] <- ifelse(single_bc_mat_collapse[,"num.WT.in.dups"] + single_bc_mat_collapse[,"num.MUT.in.dups"] == 0, "AMB", 
+                                                    ifelse(wt_frac > pcr_thresh, "WT", 
+                                                           ifelse(mut_frac > pcr_thresh, "MUT", "AMB")))
+  
+  single_bc_mat_collapse[,"num.WT.in.dups"] <- as.character(single_bc_mat_collapse[,"num.WT.in.dups"])
+  single_bc_mat_collapse[,"num.MUT.in.dups"] <- as.character(single_bc_mat_collapse[,"num.MUT.in.dups"])
+  single_bc_mat_collapse[,"num.amb.in.dups"] <- as.character(single_bc_mat_collapse[,"num.amb.in.dups"])
+  single_bc_vec <- apply(single_bc_mat_collapse, MARGIN = 2, FUN = function(x) paste0(x, collapse = ";"))
   single_bc_vec["BC"] <- BC
   single_bc_df <- t(as.data.frame(single_bc_vec, stringsAsFactors = FALSE))
   rownames(single_bc_df) <- NULL
@@ -36,8 +56,8 @@ concatenate_got <- function(BC, split_df){
 }
 
 #Identify all unique barcodes in the data frame and run the concatenating function 
-unique_bc <- unique(split_got_df[,"BC"])
-concat_got_df <- as.data.frame(Reduce(rbind, mclapply(unique_bc, FUN = function(x) (concatenate_got(BC = x, split_df = split_got_df)), mc.cores = threads)), stringsAsFactors = FALSE)
+unique_bc <- unique(split_got_df_num[,"BC"])
+concat_got_df <- as.data.frame(Reduce(rbind, mclapply(unique_bc, FUN = function(x) (concatenate_got(BC = x, split_df = split_got_df_num)), mc.cores = threads)), stringsAsFactors = FALSE)
 write.table(concat_got_df, file = "../myGoT.summTable.concat.txt", sep = "\t", row.names = FALSE, col.names = TRUE, quote = FALSE)
 
 

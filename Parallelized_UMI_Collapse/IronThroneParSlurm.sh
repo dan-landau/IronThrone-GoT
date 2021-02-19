@@ -249,7 +249,7 @@ cat <<EOF > ../IronThroneCustomInput.sh
 
 #SBATCH --job-name=IronThronePar
 #SBATCH --partition=${partition}
-#SBATCH --mem=10gb
+#SBATCH --mem=10g
 #SBATCH --output=%j.log
 #SBATCH --cpus-per-task=2
 
@@ -318,7 +318,7 @@ cat <<EOF > CombineIronThronePar.sh
 
 #SBATCH --job-name=IronThroneParConcat
 #SBATCH --partition=${partition}
-#SBATCH --mem=10gb
+#SBATCH --mem=10g
 #SBATCH --output=%j.log
 #SBATCH --cpus-per-task=${threads}
 

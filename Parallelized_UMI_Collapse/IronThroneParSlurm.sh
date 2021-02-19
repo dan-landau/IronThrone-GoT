@@ -145,11 +145,11 @@ then
 	#Randomly sort lines of combined R1/R2 file
 	if (($(grep ";" combined.fastq | wc -l) == 0))
 	then
-		awk '{printf("%s%s",$0,(NR%4==0)?"\n":";")}' combined.fastq | sort -R | tr ";" "\n" > combined_shuffled.fastq
+		awk '{printf("%s%s",$0,(NR%4==0)?"\n":";")}' combined.fastq | shuf | tr ";" "\n" > combined_shuffled.fastq
 		echo fastq files shuffled
 	elif (($(grep "|" combined.fastq | wc -l) == 0))
 	then
-		awk '{printf("%s%s",$0,(NR%4==0)?"\n":"|")}' combined.fastq | sort -R | tr "|" "\n" > combined_shuffled.fastq
+		awk '{printf("%s%s",$0,(NR%4==0)?"\n":"|")}' combined.fastq | shuf | tr "|" "\n" > combined_shuffled.fastq
 		echo fastq files shuffled
 	else
 		echo "New awk-line character needed"

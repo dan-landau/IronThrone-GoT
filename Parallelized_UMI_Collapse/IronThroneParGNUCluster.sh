@@ -144,7 +144,7 @@ then
 
 
 	#Randomly sort lines of combined R1/R2 file
-	if ($low_mem == 1)
+	if (($low_mem == 1))
 	then
 		if (($(grep ";" combined.fastq | wc -l) == 0))
 		then

@@ -196,15 +196,15 @@ then
 	fi
 
 
-	split -d -a 3 -l $target_lines shuffled.R1.fastq shuffled.R1
-	split -d -a 3 -l $target_lines shuffled.R2.fastq shuffled.R2
+	split -d -a 4 -l $target_lines shuffled.R1.fastq shuffled.R1
+	split -d -a 4 -l $target_lines shuffled.R2.fastq shuffled.R2
 
 	total_files=$(ls shuffled.R1[0-9]* | wc -l)
 
 	#Move split fastq files into shuffled_split directory
-	for file in $(ls | grep '.*R[0-9][0-9][0-9][0-9]'); do mv "$file" "$file.fastq"; done
+	for file in $(ls | grep '.*R[0-9][0-9][0-9][0-9][0-9]'); do mv "$file" "$file.fastq"; done
 	mkdir shuffled_split
-	for file in $(ls | grep '.*R[0-9][0-9][0-9][0-9]'); do mv "$file" "./shuffled_split/"; done
+	for file in $(ls | grep '.*R[0-9][0-9][0-9][0-9][0-9]'); do mv "$file" "./shuffled_split/"; done
 	echo R1 and R2 split into $total_files pieces
 
 	mkdir preprocessing_fastqs

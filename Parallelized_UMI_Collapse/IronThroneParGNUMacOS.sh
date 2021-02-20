@@ -293,4 +293,7 @@ then
 	mv myGoT.summTable.concat.umi_collapsed.txt $outdir
 fi
 
+if ((skip_iron_throne != 1))
+then
 rm Parallel_Command_List.txt
+fi

@@ -4,6 +4,7 @@ wd <- options[1]
 pcr_thresh <- as.numeric(options[2])
 ld <- as.numeric(options[3])
 dupcut <- as.numeric(options[4])
+threads <- as.numeric(options[5])
 
 setwd(wd)
 library(parallel)
@@ -18,16 +19,36 @@ for (i in list.files()){
 split_got2 <- as.data.frame(split_got[,1:(ncol(split_got)-3)], stringsAsFactors = FALSE)
 
 #Melt the data frame so each BC/UMI pair is a single row entry
-split_got_df <- data.frame(matrix(nrow = length(unlist(strsplit(split_got2[,"UMI"],";")))))
+split_got_df <- data.frame(matrix(nrow = length(unlist(strsplit(split_got2[,"UMI"],";"))), ncol = 0))
 for (i in colnames(split_got2)){
   split_got_df[,i] <- unlist(strsplit(split_got2[,i],";"))
 }
-split_got_df <- split_got_df[,2:ncol(split_got_df)]
+
+split_got_df_num <- split_got_df[,c("BC", "UMI", "num.WT.in.dups", "num.MUT.in.dups", "num.amb.in.dups")]
+split_got_df_num[,"num.WT.in.dups"] <- as.numeric(split_got_df_num[,"num.WT.in.dups"])
+split_got_df_num[,"num.MUT.in.dups"] <- as.numeric(split_got_df_num[,"num.MUT.in.dups"])
+split_got_df_num[,"num.amb.in.dups"] <- as.numeric(split_got_df_num[,"num.amb.in.dups"])
 
 #Function that takes the melted data frame from above and collapses down all UMIs associated with a single barcode (including duplicates) across all parallel runs of IronTHrone
 concatenate_got <- function(BC, split_df){
   single_bc_mat <- split_df[split_df[,"BC"] == BC,]
-  single_bc_vec <- apply(single_bc_mat, MARGIN = 2, FUN = function(x) paste0(x, collapse = ";"))
+  single_bc_mat_collapse <- data.frame(matrix(nrow = length(unique(single_bc_mat[,"UMI"]))))
+  single_bc_mat_collapse[,1] <- NULL
+  single_bc_mat_collapse[,"BC"] <- BC
+  single_bc_mat[,"BC"] <- NULL
+  single_bc_mat_collapse <- cbind(single_bc_mat_collapse, aggregate(single_bc_mat[,-1], by = list(single_bc_mat[,"UMI"]), sum))
+  colnames(single_bc_mat_collapse) <- c("BC", "UMI", "num.WT.in.dups", "num.MUT.in.dups", "num.amb.in.dups")
+  
+  wt_frac <- single_bc_mat_collapse[,"num.WT.in.dups"]/(single_bc_mat_collapse[,"num.WT.in.dups"] + single_bc_mat_collapse[,"num.MUT.in.dups"])
+  mut_frac <- single_bc_mat_collapse[,"num.MUT.in.dups"]/(single_bc_mat_collapse[,"num.WT.in.dups"] + single_bc_mat_collapse[,"num.MUT.in.dups"])
+  single_bc_mat_collapse[,"call.in.dups"] <- ifelse(single_bc_mat_collapse[,"num.WT.in.dups"] + single_bc_mat_collapse[,"num.MUT.in.dups"] == 0, "AMB", 
+                                                    ifelse(wt_frac > pcr_thresh, "WT", 
+                                                           ifelse(mut_frac > pcr_thresh, "MUT", "AMB")))
+  
+  single_bc_mat_collapse[,"num.WT.in.dups"] <- as.character(single_bc_mat_collapse[,"num.WT.in.dups"])
+  single_bc_mat_collapse[,"num.MUT.in.dups"] <- as.character(single_bc_mat_collapse[,"num.MUT.in.dups"])
+  single_bc_mat_collapse[,"num.amb.in.dups"] <- as.character(single_bc_mat_collapse[,"num.amb.in.dups"])
+  single_bc_vec <- apply(single_bc_mat_collapse, MARGIN = 2, FUN = function(x) paste0(x, collapse = ";"))
   single_bc_vec["BC"] <- BC
   single_bc_df <- t(as.data.frame(single_bc_vec, stringsAsFactors = FALSE))
   rownames(single_bc_df) <- NULL
@@ -35,9 +56,9 @@ concatenate_got <- function(BC, split_df){
 }
 
 #Identify all unique barcodes in the data frame and run the concatenating function 
-unique_bc <- unique(split_got_df[,"BC"])
-concat_got_df <- as.data.frame(Reduce(rbind, mclapply(unique_bc, FUN = function(x) (concatenate_got(BC = x, split_df = split_got_df)))), stringsAsFactors = FALSE)
-write.table(concat_got_df, file = "../myGoT.summTable.concat.txt", sep = "\t", row.names = FALSE, col.names = TRUE)
+unique_bc <- unique(split_got_df_num[,"BC"])
+concat_got_df <- as.data.frame(Reduce(rbind, mclapply(unique_bc, FUN = function(x) (concatenate_got(BC = x, split_df = split_got_df_num)), mc.cores = threads)), stringsAsFactors = FALSE)
+write.table(concat_got_df, file = "../myGoT.summTable.concat.txt", sep = "\t", row.names = FALSE, col.names = TRUE, quote = FALSE)
 
 
 #Collapse UMIs #####
@@ -98,14 +119,15 @@ list_collapse <- function(single_got_row){
     num_of_matches <- unlist(lapply(match_list, FUN = function(x) length(x)))
   }
   #Reformat the data for remaining UMIs following collapsing back into the format of the original IronThone data frame
-  single_got_row[,"UMI"] <- paste0(UMIs, collapse = ";")
-  single_got_row[,"num.WT.in.dups"] <- paste0(num.WT.in.dups, collapse = ";")
-  single_got_row[,"num.MUT.in.dups"] <- paste0(num.MUT.in.dups, collapse = ";")
-  single_got_row[,"num.amb.in.dups"] <- paste0(num.amb.in.dups, collapse = ";")
-  single_got_row[,"call.in.dups"] <- paste0(call.in.dups, collapse = ";")
-  single_got_row[,"WT.calls"] <- sum(call.in.dups == "WT")
-  single_got_row[,"MUT.calls"] <- sum(call.in.dups == "MUT")
-  single_got_row[,"amb.calls"] <- sum(call.in.dups == "AMB")
+  sort_val <- order(num.WT.in.dups + num.MUT.in.dups + num.amb.in.dups, decreasing = TRUE)
+  single_got_row[,"UMI"] <- paste0(UMIs[sort_val], collapse = ";")
+  single_got_row[,"num.WT.in.dups"] <- paste0(num.WT.in.dups[sort_val], collapse = ";")
+  single_got_row[,"num.MUT.in.dups"] <- paste0(num.MUT.in.dups[sort_val], collapse = ";")
+  single_got_row[,"num.amb.in.dups"] <- paste0(num.amb.in.dups[sort_val], collapse = ";")
+  single_got_row[,"call.in.dups"] <- paste0(call.in.dups[sort_val], collapse = ";")
+  single_got_row[,"WT.calls"] <- sum(call.in.dups[sort_val] == "WT")
+  single_got_row[,"MUT.calls"] <- sum(call.in.dups[sort_val] == "MUT")
+  single_got_row[,"amb.calls"] <- sum(call.in.dups[sort_val] == "AMB")
   
   #Keep only those UMIs with a total number of supporting PCR duplicates above the pre-specified threshold
   dup_thresh <- dupcut
@@ -144,7 +166,7 @@ UMI_collapse <- function(GoT_table){
                                       stringsAsFactors = FALSE)
   #Convert the GoT data frame into a list of single-row data frames where each entry is the data for a single cell barcode
   GoT_list <- split(GoT_table_to_collapse, seq(nrow(GoT_table_to_collapse)))
-  collapsed_GoT_list <- mclapply(GoT_list, FUN = list_collapse)
+  collapsed_GoT_list <- mclapply(GoT_list, FUN = list_collapse, mc.cores = threads)
   #Convert collapsed list back to a data frame
   collapsed_GoT_table <- do.call("rbind", collapsed_GoT_list)
   return(collapsed_GoT_table)
@@ -153,4 +175,4 @@ UMI_collapse <- function(GoT_table){
 max_collapsed_GoT_table <- UMI_collapse(raw_GoT_table)
 
 #Save output
-write.table(max_collapsed_GoT_table, file = "../myGoT.summTable.concat.umi_collapsed.txt", sep = "\t", row.names = FALSE, col.names = TRUE)
+write.table(max_collapsed_GoT_table, file = "../myGoT.summTable.concat.umi_collapsed.txt", sep = "\t", row.names = FALSE, col.names = TRUE, quote = FALSE)

@@ -20,8 +20,8 @@
 | `-tl/--target_lines` | desired file length for split fastq files (must be multiple of 4, default: 500000) |
 | `-pcr/--pcr_read_threshold` | ratio above which majority of PCR reads must be in order for a UMI to be called definitively  (default: 0.5) |
 | `-z/--skip_shuf` | if set to 1, skip the random shuffling of fastq files step, useful if needing to re-run just the IronThrone and UMI collapsing components of the pipeline (default: 0)|
-| `-x/--ski_iron_throne` | if set to 1, skip the IronThrone step of the pipeline, useful if run in combination with `skip_shuf` to only run the UMI collapsing component of the pipeline (default: 0) |
-| `-ld/--levenshtein distance` | Allowed Levenshtein distance between UMIs determined to be similar enough for collapsing (default: 0.1) |
+| `-x/--skip_iron_throne` | if set to 1, skip the IronThrone step of the pipeline, useful if run in combination with `skip_shuf` to only run the UMI collapsing component of the pipeline (default: 0) |
+| `-ld/--levenshtein_distance` | Allowed Levenshtein distance between UMIs determined to be similar enough for collapsing (default: 0.1) |
 
 <a href="https://github.com/landau-lab/IronThrone-GoT"><img src="https://github.com/landau-lab/IronThrone-GoT/blob/master/GoT_logo.png" border="0"></a>
 

@@ -26,6 +26,8 @@ iron_throne_loc=./IronThrone-GoT
 pcr_read_threshold=0.5
 skip_iron_throne=0
 levenshtein_distance=0.1
+low_mem=0
+threads=$(nproc)
 
 
 #Set Up Command Line Options
@@ -94,6 +96,12 @@ while [ "$1" != "" ]; do
 		-ld | --levenshtein_distance )	shift
 					levenshtein_distance=$1
 					;;
+		-lm | --low_mem )		shift
+					low_mem=$1
+					;;
+		-t | --threads )		shift
+					threads=$1
+					;;
 	esac
 	shift
 done
@@ -144,17 +152,33 @@ then
 
 
 	#Randomly sort lines of combined R1/R2 file
-	if (($(grep ";" combined.fastq | wc -l) == 0))
+	if (($low_mem == 1))
 	then
-		awk '{printf("%s%s",$0,(NR%4==0)?"\n":";")}' combined.fastq | sort -R | tr ";" "\n" > combined_shuffled.fastq
-		echo fastq files shuffled
-	elif (($(grep "|" combined.fastq | wc -l) == 0))
-	then
-		awk '{printf("%s%s",$0,(NR%4==0)?"\n":"|")}' combined.fastq | sort -R | tr "|" "\n" > combined_shuffled.fastq
-		echo fastq files shuffled
+		if (($(grep ";" combined.fastq | wc -l) == 0))
+		then
+			awk '{printf("%s%s",$0,(NR%4==0)?"\n":";")}' combined.fastq | sort -R | tr ";" "\n" > combined_shuffled.fastq
+			echo fastq files shuffled
+		elif (($(grep "|" combined.fastq | wc -l) == 0))
+		then
+			awk '{printf("%s%s",$0,(NR%4==0)?"\n":"|")}' combined.fastq | sort -R | tr "|" "\n" > combined_shuffled.fastq
+			echo fastq files shuffled
+		else
+			echo "New awk-line character needed"
+			exit 1
+		fi
 	else
-		echo "New awk-line character needed"
-		exit 1
+		if (($(grep ";" combined.fastq | wc -l) == 0))
+		then
+			awk '{printf("%s%s",$0,(NR%4==0)?"\n":";")}' combined.fastq | shuf | tr ";" "\n" > combined_shuffled.fastq
+			echo fastq files shuffled
+		elif (($(grep "|" combined.fastq | wc -l) == 0))
+		then
+			awk '{printf("%s%s",$0,(NR%4==0)?"\n":"|")}' combined.fastq | shuf | tr "|" "\n" > combined_shuffled.fastq
+			echo fastq files shuffled
+		else
+			echo "New awk-line character needed"
+			exit 1
+		fi
 	fi
 
 	#Separate shuffled file back into R1 and R2
@@ -177,15 +201,15 @@ then
 	fi
 
 
-	gsplit -d -a 3 -l $target_lines shuffled.R1.fastq shuffled.R1
-	gsplit -d -a 3 -l $target_lines shuffled.R2.fastq shuffled.R2
+	gsplit -d -a 4 -l $target_lines shuffled.R1.fastq shuffled.R1
+	gsplit -d -a 4 -l $target_lines shuffled.R2.fastq shuffled.R2
 
 	total_files=$(ls shuffled.R1[0-9]* | wc -l)
 
 	#Move split fastq files into shuffled_split directory
-	for file in $(ls | grep '.*R[0-9][0-9][0-9][0-9]'); do mv "$file" "$file.fastq"; done
+	for file in $(ls | grep '.*R[0-9][0-9][0-9][0-9][0-9]'); do mv "$file" "$file.fastq"; done
 	mkdir shuffled_split
-	for file in $(ls | grep '.*R[0-9][0-9][0-9][0-9]'); do mv "$file" "./shuffled_split/"; done
+	for file in $(ls | grep '.*R[0-9][0-9][0-9][0-9][0-9]'); do mv "$file" "./shuffled_split/"; done
 	echo R1 and R2 split into $total_files pieces
 
 	mkdir preprocessing_fastqs
@@ -204,68 +228,72 @@ cd Output/
 main_output_folder=$(pwd)
 
 cd ..
-cd shuffled_split/
 
 if ((skip_iron_throne != 1))
 then
-	echo Begin job parallelization
-fi
+	cd shuffled_split/
 
-#Create text file of commands for GNU Parallel to execute
-touch ../Parallel_Command_List.txt
->../Parallel_Command_List.txt
+	if ((skip_iron_throne != 1))
+	then
+		echo Begin job parallelization
+	fi
 
-#Loop through split R1 and R2 files, creating directories for each split's individual IronThrone run and adding a command to the parallel command list with the corresponding R1 and R2 filenames
-total_files=0
-for i in $(ls | grep '.*R[0-9][0-9][0-9][0-9]' | sed 's/\.fastq//g' | sed 's/.*R[0-9]//g' | sort | uniq);
-do
-R1=$(pwd)'/'$(ls | grep "R1${i}");
-R2=$(pwd)'/'$(ls | grep "R2${i}");
-output=${main_output_folder}'/'${i}
-mkdir -p ${output};
+	#Create text file of commands for GNU Parallel to execute
+	touch ../Parallel_Command_List.txt
+	>../Parallel_Command_List.txt
 
-echo "${iron_throne_loc} \
--r ${run} \
--f1 ${R1} \
--f2 ${R2} \
--c ${config} \
--w ${whitelist} \
--u ${umilen} \
--b ${bclen} \
--o ${output} \
--m ${mmtch} \
--p ${postP} \
--d 1 \
--s ${sample} \
--l ${log} \
--k ${keepouts} \
--v ${verbose}" >> ../Parallel_Command_List.txt
+	#Loop through split R1 and R2 files, creating directories for each split's individual IronThrone run and adding a command to the parallel command list with the corresponding R1 and R2 filenames
+	total_files=0
+	for i in $(ls | grep '.*R[0-9][0-9][0-9][0-9][0-9]' | sed 's/\.fastq//g' | sed 's/.*R[0-9]//g' | sort | uniq);
+	do
+	R1=$(pwd)'/'$(ls | grep "R1${i}");
+	R2=$(pwd)'/'$(ls | grep "R2${i}");
+	output=${main_output_folder}'/'${i}
+	mkdir -p ${output};
+
+	echo "${iron_throne_loc} \
+	-r ${run} \
+	-f1 ${R1} \
+	-f2 ${R2} \
+	-c ${config} \
+	-w ${whitelist} \
+	-u ${umilen} \
+	-b ${bclen} \
+	-o ${output} \
+	-m ${mmtch} \
+	-p ${postP} \
+	-d 1 \
+	-s ${sample} \
+	-l ${log} \
+	-k ${keepouts} \
+	-v ${verbose}" >> ../Parallel_Command_List.txt
 
 
-done
+	done
 
-#Back to main level folder
-cd ..
+	#Back to main level folder
+	cd ..
 
-#Run list of IronThrone commands on split fastqs using GNU Parallel
-if ((skip_iron_throne != 1))
-then
-	parallel :::: Parallel_Command_List.txt
+	#Run list of IronThrone commands on split fastqs using GNU Parallel
+	parallel -j ${threads} :::: Parallel_Command_List.txt
 
 	echo All instances of IronThrone complete
 fi
 
 #Call R script to concatenate and collapse output
-Rscript Combine_IronThrone_Parallel_Output.R $main_output_folder ${pcr_read_threshold} ${levenshtein_distance} ${dupcut}
+Rscript Combine_IronThrone_Parallel_Output.R $main_output_folder ${pcr_read_threshold} ${levenshtein_distance} ${dupcut} ${threads}
 
-echo All IronThrone outputs concatenated into myGoT.summTable.concat.txt
+echo All IronThrone outputs concatenated into myGoT.summTable.concat.umi_collapsed.txt
 
 outdir=$(greadlink -f $outdir)
 
-if [ ! -f $outdir'/myGoT.summTable.concat.txt' ]
+if [ ! -f $outdir'/myGoT.summTable.concat.umi_collapsed.txt' ]
 then
 	mv myGoT.summTable.concat.txt $outdir
 	mv myGoT.summTable.concat.umi_collapsed.txt $outdir
 fi
 
+if ((skip_iron_throne != 1))
+then
 rm Parallel_Command_List.txt
+fi

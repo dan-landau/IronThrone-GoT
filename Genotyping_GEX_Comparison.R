@@ -5,7 +5,7 @@ h5_file <- options[2]
 got_df_loc <- options[3]
 target_gene <- options[4]
 output_dir <- options[5]
-quant_thresh <- options[6]
+quant_thresh <- as.numeric(options[6])
 
 
 #UMI to Binary and Binary to UMI conversion functions
@@ -18,7 +18,7 @@ umi_bin_to_seq <- function(umi_decimal, umi_len = 12){
   }
   if (nchar(umi_bin) == (umi_len*2)){
     umi_bits <- substring(umi_bin, seq(1, nchar(umi_bin), 2), seq(2, nchar(umi_bin), 2))
-    umi_char <- plyr::mapvalues(umi_bits, from = c("00", "01", "10", "11"), to = c("A", "C", "G", "T"))
+    umi_char <- plyr::mapvalues(umi_bits, from = c("00", "01", "10", "11"), to = c("A", "C", "G", "T"), warn_missing = FALSE)
     umi <- paste(umi_char, sep = "", collapse = "")
   }
   return(umi)
@@ -27,7 +27,7 @@ umi_bin_to_seq <- function(umi_decimal, umi_len = 12){
 
 umi_seq_to_bin_decimal <- function(umi_seq){
   umi_char <- unlist(strsplit(umi_seq, ""))
-  umi_bits <- plyr::mapvalues(umi_char, to = c("00", "01", "10", "11"), from = c("A", "C", "G", "T"))
+  umi_bits <- plyr::mapvalues(umi_char, to = c("00", "01", "10", "11"), from = c("A", "C", "G", "T"), warn_missing = FALSE)
   umi_bin <- paste0(umi_bits, collapse = "")
   umi_decimal <- strtoi(umi_bin, base = 2)
   return(umi_decimal)
@@ -40,7 +40,7 @@ library(rhdf5)
 library(stringdist)
 
 #Load barcodes that will be used to generate seurat object
-seurat_bcs <- scan(file = bc_loc, what = "character")
+seurat_bcs <- scan(file = bc_loc, what = "character", quiet = TRUE)
 seurat_bcs <- gsub("-.*", "", seurat_bcs)
 
 #Retrieve GEX molecule information
@@ -137,7 +137,6 @@ df_all_gene_to_keep$UMI <- unlist(mclapply(df_all_gene_to_keep$UMI_bin, mc.cores
 df_all_gene_to_keep$BC_UMI <- paste0(df_all_gene_to_keep$BC, "_", df_all_gene_to_keep$UMI)
 
 df_all_gene_collapse <- df_all_gene_to_keep
-sort(table(df_all_gene_to_keep$BC_UMI), decreasing = TRUE)
 
 for (k in unique(df_all_gene_collapse$BC_UMI)){
   target_rows <- which(df_all_gene_collapse$BC_UMI == k)
@@ -203,10 +202,10 @@ md$Total.calls.filt <- md$WT.calls.filt + md$MUT.calls.filt
 other_gene_counts <- split_got_df_gene %>% filter(Gene_Group == "Other Gene") %>% pull(total_dups_wt_mut)
 threshold <- quantile(other_gene_counts, probs = quant_thresh)
 
-thresh_plot <- ggplot(split_got_df_gene, aes(y = log10(total_dups), x = Gene_Group, fill = Gene_Group))+ geom_violin(position = position_dodge(0.9), trim = FALSE) + 
-  geom_boxplot(width=0.1, position = position_dodge(0.9), alpha = 0.5) + 
-  geom_hline(yintercept = log10(threshold)) + 
-  theme_bw() + 
+thresh_plot <- ggplot(split_got_df_gene, aes(y = log10(total_dups), x = Gene_Group, fill = Gene_Group))+ geom_violin(position = position_dodge(0.9), trim = FALSE) +
+  geom_boxplot(width=0.1, position = position_dodge(0.9), alpha = 0.5) +
+  geom_hline(yintercept = log10(threshold)) +
+  theme_bw() +
   labs(y = "log10(Supporting Read Counts per UMI)", x = "Amplicon Match to GEX Library")
 
 if(file.exists(paste0(output_dir, "/threshold_plot.pdf"))){
@@ -223,7 +222,7 @@ split_got_df_gene_thresh <- split_got_df_gene
 
 unique_bc_approx_no_gene_thresh <- unique(split_got_df_gene_thresh %>% filter(Keep) %>% pull(BC))
 split_got_df_approx_no_gene_thresh <- split_got_df_gene_thresh %>% filter(Keep)
-concat_got_df_approx_no_gene_thresh <- as.data.frame(Reduce(rbind, mclapply(unique_bc_approx_no_gene_thresh, FUN = function(x) (concatenate_got(BC = x, split_df = split_got_df_approx_no_gene_thresh)), mc.cores = 16)), stringsAsFactors = FALSE)
+concat_got_df_approx_no_gene_thresh <- as.data.frame(Reduce(rbind, mclapply(unique_bc_approx_no_gene_thresh, FUN = function(x) (concatenate_got(BC = x, split_df = split_got_df_approx_no_gene_thresh)), mc.cores = detectCores())), stringsAsFactors = FALSE)
 concat_got_df_approx_no_gene_thresh$Genotype <- ifelse(is.na(concat_got_df_approx_no_gene_thresh$WT.calls), "No Data",
                                                        ifelse(concat_got_df_approx_no_gene_thresh$MUT.calls>0, "MUT",
                                                               ifelse(concat_got_df_approx_no_gene_thresh$WT.calls>=1, "WT", "NA")))

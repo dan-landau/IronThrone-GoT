@@ -1,0 +1,306 @@
+---
+title: "IronThrone Gene Expression Library Comparison"
+output: html_notebook
+---
+
+This script uses BC/UMI pairs from the gene expression library to further refine genotyping calls from IronThrone. We begin by assigning file paths and character strings as options for the various files and parameters we will need.  
+- `bc_loc` - File path for text file containing filtered barcodes from Cellranger output, can be found in `/outs/filtered_feature_bc_matrix`  
+- `h5_file` - File path for gene expression `molecule_info.h5` file from Cellranger output  
+- `got_df_loc` - File path for IronThrone output `.txt` file  
+- `target_gene` - Character string for targeted gene of interest as it is named in 10X data  
+- `output_dir` - Folder path for desired location for outputs from this script  
+
+```{r}
+bc_loc <- "~/GitHub/IronThrone_RMD_Files/barcodes.tsv"
+h5_file <- "~/GitHub/IronThrone_RMD_Files/molecule_info.h5"
+got_df_loc <- "~/GitHub/IronThrone_RMD_Files/myGoT.summTable.concat.umi_collapsed.txt"
+target_gene <- "DNMT3A"
+output_dir <- "~/Output"
+```
+
+Next, we define a couple of functions that will be useful for converting UMI sequences to binary representation and vice versa. To save storage space, Cellranger converts UMI sequences into 2-bit representation, as described [here](https://support.10xgenomics.com/single-cell-gene-expression/software/pipelines/latest/output/molecule_info). These functions help us convert between the two representations as needed. By default, we assume 12bp UMI sequences, but that can be modified in the `umi_bin_to_seq` parameters.
+```{r}
+umi_bin_to_seq <- function(umi_decimal, umi_len = 12){
+  umi_bin <- R.utils::intToBin(umi_decimal)
+  umi <- NA
+  if (nchar(umi_bin) < (umi_len*2)){
+    difference <- (umi_len*2)-nchar(umi_bin)
+    umi_bin <- paste0(paste0(rep(0, difference), collapse = ""), umi_bin)
+  }
+  if (nchar(umi_bin) == (umi_len*2)){
+    umi_bits <- substring(umi_bin, seq(1, nchar(umi_bin), 2), seq(2, nchar(umi_bin), 2))
+    umi_char <- plyr::mapvalues(umi_bits, from = c("00", "01", "10", "11"), to = c("A", "C", "G", "T"), warn_missing = FALSE)
+    umi <- paste(umi_char, sep = "", collapse = "")
+  }
+  return(umi)
+}
+
+
+umi_seq_to_bin_decimal <- function(umi_seq){
+  umi_char <- unlist(strsplit(umi_seq, ""))
+  umi_bits <- plyr::mapvalues(umi_char, to = c("00", "01", "10", "11"), from = c("A", "C", "G", "T"), warn_missing = FALSE)
+  umi_bin <- paste0(umi_bits, collapse = "")
+  umi_decimal <- strtoi(umi_bin, base = 2)
+  return(umi_decimal)
+}
+```
+
+We also load in additional requisite packages that will be used throughout this analysis.
+```{r, message=FALSE}
+library(parallel)
+library(tidyverse)
+library(rhdf5)
+library(stringdist)
+```
+
+
+First, we load barcodes that Cellranger has identified.
+``` {r}
+seurat_bcs <- scan(file = bc_loc, what = "character", quiet = TRUE)
+seurat_bcs <- gsub("-.*", "", seurat_bcs)
+```
+
+
+Next, we create a list containing the molecule information from cellranger as a database to which we can compare IronThrone results.
+```{r}
+gex_molecules <- list()
+gex_molecules[["barcode_idx"]] <- h5read(h5_file, name = "barcode_idx") + 1
+gex_molecules[["barcodes"]] <- h5read(h5_file, name = "barcodes")
+gex_molecules[["umi_counts"]] <- h5read(h5_file, name = "count")
+gex_molecules[["feature_idx"]] <- h5read(h5_file, name = "feature_idx") + 1
+gex_molecules[["feature_name"]] <- h5read(h5_file, name = "features/name")
+gex_molecules[["feature_id"]] <- h5read(h5_file, name = "features/id")
+gex_molecules[["umi"]] <- h5read(h5_file, name = "umi")
+```
+
+We create a metadata data frame of cell barcodes found in gene expression data that will be useful for downstream analysis.
+```{r}
+md <- data.frame(BC = seurat_bcs)
+```
+
+We then read in IronThrone results as a data frame, removing any rows where cell barcodes were ultimately filtered for not having sufficient supporting reads.
+```{r}
+got_df <- read.delim(got_df_loc, stringsAsFactors = FALSE)
+got_df <- got_df[got_df$UMI != "",]
+```
+
+We can begin with the most naïve genotyping, using the complete IronThrone output with any comparison back to gene expression data. Here, any number of MUT UMIs results in a MUT call, and 0 MUT and any WT UMIs is called as WT. These results will be stored in the column `unfilt.Genotype`.
+```{r}
+temp_metadata <- merge(x = got_df, by.x = c("BC"), y = md, by.y = c("BC"), all.y = TRUE)
+
+md$unfilt.WT.calls <- as.numeric(temp_metadata$WT.calls)
+md$unfilt.MUT.calls <- as.numeric(temp_metadata$MUT.calls)
+md$unfilt.Total.calls <- as.numeric(md$unfilt.WT.calls) + as.numeric(md$unfilt.MUT.calls)
+
+md$unfilt.Genotype <- ifelse(is.na(md$unfilt.WT.calls), "No Data",
+                                  ifelse(md$unfilt.MUT.calls>0, "MUT",
+                                         ifelse(md$unfilt.WT.calls>=1, "WT", "NA")))
+```
+
+To begin our comparisons to the GEX library, we split our IronThrone results into a per-UMI data frame.
+```{r}
+split_got_df <- data.frame(matrix(nrow = length(unlist(strsplit(got_df[,"UMI"],";"))), ncol = 0))
+for (i in colnames(got_df)){
+  per_umi <- length(grep(";", got_df[,i])) > 0
+  if (per_umi){
+    split_got_df[,i] <- unlist(strsplit(got_df[,i],";"))
+  } else {
+    split_got_df[,i] <- rep(got_df[,i], times = got_df$WT.calls + got_df$MUT.calls + got_df$amb.calls)
+  }
+}
+split_got_df$num.WT.in.dups <- as.numeric(split_got_df$num.WT.in.dups)
+split_got_df$num.MUT.in.dups <- as.numeric(split_got_df$num.MUT.in.dups)
+split_got_df$num.amb.in.dups <- as.numeric(split_got_df$num.amb.in.dups)
+split_got_df$WT.calls <- as.numeric(split_got_df$WT.calls)
+split_got_df$MUT.calls <- as.numeric(split_got_df$MUT.calls)
+split_got_df$amb.calls <- as.numeric(split_got_df$amb.calls)
+
+split_got_df$BC_UMI <- paste0(split_got_df$BC, "_", split_got_df$UMI)
+split_got_df$total_dups <- split_got_df$num.WT.in.dups + split_got_df$num.MUT.in.dups + split_got_df$num.amb.in.dups
+split_got_df$total_dups_wt_mut <- split_got_df$num.WT.in.dups + split_got_df$num.MUT.in.dups
+split_got_df$UMI_bin <- unlist(mclapply(split_got_df$UMI, umi_seq_to_bin_decimal, mc.cores = detectCores()))
+split_got_df$BC_UMI_bin <- paste0(split_got_df$BC, "_", split_got_df$UMI_bin)
+```
+
+Next, we create a new data frame of all the BC/UMI combinations found in our GEX library that correspond to our target gene of interest.
+```{r}
+target_gene_idx <- which(gex_molecules$feature_name == target_gene)
+target_gene_id <- gex_molecules$feature_id[target_gene_idx]
+target_gene_entries <- which(gex_molecules$feature_idx == target_gene_idx)
+df_10x <- data.frame("BC" = gex_molecules$barcodes[gex_molecules$barcode_idx[target_gene_entries]])
+
+umi_filt <- gex_molecules$umi[target_gene_entries]
+df_10x$UMI <- unlist(mclapply(umi_filt, mc.cores = detectCores(), FUN = function(x){
+  umi_bin_to_seq(x, umi_len = 12)
+}))
+df_10x$counts <- gex_molecules$umi_counts[target_gene_entries]
+df_10x$BC_UMI <- paste0(df_10x$BC, "_", df_10x$UMI)
+```
+
+Using this information, we can see which BC/UMI pairs exactly or approximately (within 2 edits) match BC/UMI pairs for our target gene of interest in 10X GEX data.
+```{r}
+split_got_df$Exact_Match <- split_got_df$BC_UMI %in% df_10x$BC_UMI
+
+split_got_df$Approx_Match <- unlist(mclapply(split_got_df$BC_UMI, mc.cores = detectCores(), FUN = function(x){
+  ain(x, df_10x$BC_UMI, method = "lv", maxDist = 2)
+}))
+```
+
+Now, we create a data frame of all BC/UMI pairs in our 10X GEX data, and filter it down to those BC/UMI pairs we find in our genotyping results.
+```{r}
+target_bc_idx <- which(gex_molecules$barcodes %in% got_df$BC)
+molecules <- gex_molecules$barcode_idx %in% target_bc_idx
+df_all_gene <- data.frame("BC_IDX" = gex_molecules$barcode_idx[molecules])
+df_all_gene$BC <- gex_molecules$barcodes[df_all_gene$BC_IDX]
+df_all_gene$UMI_bin <- gex_molecules$umi[molecules]
+df_all_gene$BC_UMI_bin <- paste0(df_all_gene$BC, "_", df_all_gene$UMI_bin)
+df_all_gene$gene_idx <- gex_molecules$feature_idx[molecules]
+df_all_gene$gene <- gex_molecules$feature_name[df_all_gene$gene_idx]
+df_all_gene$count <- gex_molecules$umi_counts[molecules]
+to_keep <- df_all_gene$BC_UMI_bin %in% (split_got_df %>% pull(BC_UMI_bin))
+
+df_all_gene_to_keep <- df_all_gene[to_keep,]
+df_all_gene_to_keep$UMI <- unlist(mclapply(df_all_gene_to_keep$UMI_bin, mc.cores = detectCores(), FUN = function(x){
+  umi_bin_to_seq(x, umi_len = 12)
+}))
+df_all_gene_to_keep$BC_UMI <- paste0(df_all_gene_to_keep$BC, "_", df_all_gene_to_keep$UMI)
+
+df_all_gene_collapse <- df_all_gene_to_keep
+
+#For more granular information, this step here parses the rare cases in which a single BC/UMI pair has been assigned to multiple genes in the molecule info file.
+for (k in unique(df_all_gene_collapse$BC_UMI)){
+  target_rows <- which(df_all_gene_collapse$BC_UMI == k)
+  if (length(target_rows) > 1){
+    sub_df <- df_all_gene_collapse[target_rows,]
+    if (target_gene %in% sub_df$gene){
+      if(length(grep("_CITE", sub_df$gene)) > 0){
+        sub_df$gene <- paste0("Multiple_", target_gene, "_CITE")
+      } else{
+        sub_df$gene <- paste0("Multiple_", target_gene)
+      }
+    } else {
+      sub_df$gene <- "Multiple"
+    }
+    min_row <- min(target_rows)
+    target_rows <- target_rows[target_rows != min_row]
+    df_all_gene_collapse[min_row,] <- sub_df[1,]
+    df_all_gene_collapse <- df_all_gene_collapse[-target_rows,]
+  }
+}
+```
+
+With all of this information combined, we can now assign BC/UMI pairs in IronThrone results to 1 of four categories.  
+1. `Exact` - Exact match to a BC/UMI pair in 10X GEX data for the target gene of interest.  
+2. `Approx` - Approximate match to a BC/UMI pair in 10X GEX data for the target gene of interest.  
+3. `No Gene` - Does not match any BC/UMI pair in 10X GEX data.  
+4. `Other Gene` - Found in 10X GEX data, but corresponding to a gene that is not the target gene of interest.
+```{r}
+split_got_df_gene <- (merge(split_got_df, df_all_gene_collapse[,c("BC_UMI", "gene")], by = "BC_UMI", all.x = TRUE, all.y = FALSE, sort = FALSE))
+
+split_got_df_gene$In_GEX <- !is.na(split_got_df_gene$gene)
+
+split_got_df_gene$Gene_Group <- ifelse(split_got_df_gene$Exact_Match,
+                                       "Exact",
+                                       ifelse(split_got_df_gene$Approx_Match,
+                                              "Approx",
+                                              ifelse(split_got_df_gene$In_GEX,
+                                                     "Other Gene",
+                                                     "No Gene")))
+```
+
+We can now define a function to collapse our per-UMI data frame back into a per-barcode data frame after we filter our UMIs we no longer want to include.
+```{r}
+concatenate_got <- function(BC, split_df){
+  single_bc_mat <- split_df[split_df[,"BC"] == BC,]
+  single_bc_vec <- apply(single_bc_mat, MARGIN = 2, FUN = function(x) paste0(x, collapse = ";"))
+  single_bc_vec["BC"] <- BC
+  single_bc_vec["WT.calls"] <- sum(single_bc_mat[,"call.in.dups"] == "WT")
+  single_bc_vec["MUT.calls"] <- sum(single_bc_mat[,"call.in.dups"] == "MUT")
+  single_bc_vec["amb.calls"] <- sum(single_bc_mat[,"call.in.dups"] == "AMB")
+  single_bc_df <- t(as.data.frame(single_bc_vec, stringsAsFactors = FALSE))
+  rownames(single_bc_df) <- NULL
+  return(single_bc_df)
+}
+```
+
+First, we will return genotyping results by filtering out those UMIs that correspond to non-target genes in the 10X GEX data. These results will be stored in the column `filt.Genotype`.
+```{r}
+unique_bc_approx_no_gene <- unique(split_got_df_gene %>% filter(Gene_Group != "Other Gene") %>% pull(BC))
+split_got_df_approx_no_gene <- split_got_df_gene %>% filter(Gene_Group != "Other Gene")
+concat_got_df_approx_no_gene <- as.data.frame(Reduce(rbind, mclapply(unique_bc_approx_no_gene, FUN = function(x) (concatenate_got(BC = x, split_df = split_got_df_approx_no_gene)), mc.cores = detectCores())), stringsAsFactors = FALSE)
+concat_got_df_approx_no_gene$Genotype <- ifelse(is.na(concat_got_df_approx_no_gene$WT.calls), "No Data",
+                                                ifelse(concat_got_df_approx_no_gene$MUT.calls>0, "MUT",
+                                                       ifelse(concat_got_df_approx_no_gene$WT.calls>=1, "WT", "NA")))
+
+
+temp_metadata <- merge(md, concat_got_df_approx_no_gene[, c("BC", "Genotype", "WT.calls", "MUT.calls")], by = "BC", all.x = TRUE, all.y = FALSE)
+rownames(temp_metadata) <- temp_metadata$BC
+md$filt.Genotype <- temp_metadata$Genotype
+md$WT.calls.filt <- as.numeric(temp_metadata$WT.calls)
+md$MUT.calls.filt <- as.numeric(temp_metadata$MUT.calls)
+md$Total.calls.filt <- md$WT.calls.filt + md$MUT.calls.filt
+```
+
+Next, to further increase the accuracy of our genotyping results, we can apply a threshold to the number of supporting reads required for a UMI that matches no genes in the 10X GEX data (`No Gene`) to be included in our results. There are a couple ways of doing this.  
+1. We can use the distribution of supporting reads for UMIs with matches to non-target genes (`Other Gene`) as a basis for determining which UMIs with no gene match (`No Gene`) should be discarded. As a default starting parameter for this approach, we use the 80th percentile of supporting reads for the `Other Gene` group.
+```{r}
+quant_thresh <- 0.8
+other_gene_counts <- split_got_df_gene %>% filter(Gene_Group == "Other Gene") %>% pull(total_dups_wt_mut)
+threshold <- quantile(other_gene_counts, probs = quant_thresh)
+```
+
+2. We have noticed that the distribution of supporting reads for the `No Gene` UMI group tends to be bimodal, and have hypothesized that the upper peak of the distribution may include more true genotyping UMIs. We can thus find the local minimum between these peaks and use that as our threshold cutoff.
+```{r}
+no_gene_counts <- split_got_df_gene %>% filter(Gene_Group == "No Gene") %>% pull(total_dups_wt_mut)
+d <- density(log10(no_gene_counts))
+
+threshold <- 10^(optimize(approxfun(d$x,d$y),interval=c(0,3))$minimum)
+```
+
+To visualize how different thresholds will impact exclusion of `No Gene` UMIs, we can plot supporting read counts across all 4 of our UMI groups.
+```{r, message = FALSE}
+thresh_plot <- ggplot(split_got_df_gene, aes(y = log10(total_dups), x = Gene_Group, fill = Gene_Group))+ geom_violin(position = position_dodge(0.9), trim = FALSE) +
+  geom_boxplot(width=0.1, position = position_dodge(0.9), alpha = 0.5) +
+  geom_hline(yintercept = log10(threshold)) +
+  theme_bw() +
+  labs(y = "log10(Supporting Read Counts per UMI)", x = "Amplicon Match to GEX Library")
+thresh_plot
+
+if(file.exists(paste0(output_dir, "/threshold_plot.pdf"))){
+  print("Warning: File threshold_plot.pdf already exists in output directory")
+} else{
+  ggsave(filename = paste0(output_dir, "/threshold_plot.pdf"), plot = thresh_plot, device = "pdf")
+}
+```
+
+We can now use this threshold value to exlude `No Gene` UMIs with fewer supporting read counts, and create one final set of genotyping calls. These results willbe stored in the column `thresh.filt.Genotype`.
+```{r}
+split_got_df_gene$Keep <- ifelse(split_got_df_gene$Gene_Group %in% c("Exact", "Approx"), TRUE,
+                                 ifelse(split_got_df_gene$Gene_Group == "Other Gene", FALSE,
+                                        ifelse(split_got_df_gene$total_dups_wt_mut > threshold, TRUE, FALSE)))
+split_got_df_gene_thresh <- split_got_df_gene
+
+unique_bc_approx_no_gene_thresh <- unique(split_got_df_gene_thresh %>% filter(Keep) %>% pull(BC))
+split_got_df_approx_no_gene_thresh <- split_got_df_gene_thresh %>% filter(Keep)
+concat_got_df_approx_no_gene_thresh <- as.data.frame(Reduce(rbind, mclapply(unique_bc_approx_no_gene_thresh, FUN = function(x) (concatenate_got(BC = x, split_df = split_got_df_approx_no_gene_thresh)), mc.cores = detectCores())), stringsAsFactors = FALSE)
+concat_got_df_approx_no_gene_thresh$Genotype <- ifelse(is.na(concat_got_df_approx_no_gene_thresh$WT.calls), "No Data",
+                                                       ifelse(concat_got_df_approx_no_gene_thresh$MUT.calls>0, "MUT",
+                                                              ifelse(concat_got_df_approx_no_gene_thresh$WT.calls>=1, "WT", "NA")))
+
+
+temp_metadata <- merge(md, concat_got_df_approx_no_gene_thresh[, c("BC", "Genotype", "WT.calls", "MUT.calls")], by = "BC", all.x = TRUE, all.y = FALSE)
+rownames(temp_metadata) <- md$BC
+md$thresh.filt.Genotype <- temp_metadata$Genotype
+md$WT.calls.thresh.filt <- as.numeric(temp_metadata$WT.calls)
+md$MUT.calls.thresh.filt <- as.numeric(temp_metadata$MUT.calls)
+md$Total.calls.thresh.filt <- md$WT.calls.thresh.filt + md$MUT.calls.thresh.filt
+```
+
+Finally, we save our metadata file to our output folder for later integration with a single-cell object and downstream analysis.
+```{r}
+if(file.exists(paste0(output_dir, "/metadata.Rdata"))){
+  print("Warning: File metadata.Rdata already exists in output directory")
+} else{
+  save(md, file = paste0(output_dir, "/metadata.Rdata"))
+}
+```

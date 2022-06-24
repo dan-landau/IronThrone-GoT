@@ -28,7 +28,7 @@
 ## Notes/Bugs to be Ironed out in Future Versions
 - Amplicon fastqs should be concatenated, paired-end, into 1 `R1` and 1 `R2` file
 - fastq read lengths should be identical for all reads within a given R1 or R2 file (R1 and R2 read lengths do not need to be equivalent)
-- Barcode file can be a complete whitelist provided by 10X (see below) or a custom `.txt` file of barcodes from a corresponding 10X run
+- Barcode file can be a complete whitelist provided by 10X (see below) or a custom `.txt` file of barcodes from a corresponding 10X run. Note: If using the unzipped `barcodes.tsv` file from CellRanger's `filtered_feature_bc_matrix` folder, barcodes will often be appended with `-1`, which will result in an error. You can run `sed 's/..$//' < barcodes.tsv > barcodes_trim.tsv` to trim these suffixes.
 - `.config` file entries should be hard-tab-separated
 
 # <a name="started"></a>IronThrone-GoT
